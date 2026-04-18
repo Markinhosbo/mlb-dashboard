@@ -204,14 +204,16 @@ app.post('/api/gerar-apostas', async (req, res) => {
     };
   });
 
-  const prompt = `Analista MLB. Time: ${teamName}. Gere até 5 apostas variadas (Hits, HR, RBI, Runs, Total Bases) APENAS com probabilidade >70%.
+  const prompt = `Você é um analisador de apostas MLB. Responda SOMENTE com JSON puro, sem texto antes ou depois, sem explicações, sem markdown.
 
-JOGADORES (ops=OPS, hPG=hits/jogo, hrPG=HR/jogo, rbiPG=RBI/jogo; recent=últimos jogos: h05/h15=hit rate over 0.5/1.5, hr05=HR rate, rbi05/rbi15=RBI rate, tb15/tb25=Total Bases rate, r05=Runs rate):
+Time: ${teamName}
+Jogadores (ops, hPG=hits/jogo, hrPG=HR/jogo, rbiPG=RBI/jogo; recent: h05/h15=hit rate over 0.5/1.5, hr05=HR rate, rbi05/rbi15=RBI rate, tb15/tb25=Total Bases rate, r05=Runs rate):
 ${JSON.stringify(enriched)}
 
-REGRAS: type lock(>80%) ou mid(70-80%). Só games>=8. Máx 5 apostas de tipos DIFERENTES. Se forma recente (recent) contradiz temporada, priorize recente. Retorne lista vazia se nada >70%.
+Gere até 5 apostas VARIADAS (Hits, HR, RBI, Runs, Total Bases) com probabilidade >70%. type: lock(>80%) ou mid(70-80%). Só games>=8. Tipos diferentes. Se sem apostas >70%, retorne {"suggestions":[]}.
 
-JSON sem markdown: {"suggestions":[{"type":"lock|mid","player":"Nome","betType":"pt-BR","line":"ex: 1.5 Hits","direction":"over|under","probability":78,"hitRate":73,"justification":"1 frase"}]}`;
+RESPONDA APENAS COM ESTE JSON, NADA MAIS:
+{"suggestions":[{"type":"lock","player":"Nome","betType":"Hits por Jogo","line":"1.5 Hits","direction":"over","probability":80,"hitRate":75,"justification":"1 frase curta"}]}`;
 
   try {
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
