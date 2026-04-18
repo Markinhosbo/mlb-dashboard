@@ -11,7 +11,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const PORT = process.env.PORT || 3000;
 
-// ── MLB Stats ──────────────────────────────────────────────
+// ── MLB Stats (temporada) ──────────────────────────────────
 app.get('/api/mlb-stats', async (req, res) => {
   const { teamId, season } = req.query;
   if (!teamId) return res.status(400).json({ error: 'teamId obrigatório' });
@@ -41,6 +41,7 @@ app.get('/api/mlb-stats', async (req, res) => {
       const st = s.stat;
       const games = parseInt(st.gamesPlayed) || 1;
       return {
+        id: s.player.id,
         name: s.player.fullName,
         games,
         avg: parseFloat(st.avg) || 0,
@@ -70,9 +71,100 @@ app.get('/api/mlb-stats', async (req, res) => {
   }
 });
 
+// ── Game Log (últimos 15 jogos) ────────────────────────────
+app.get('/api/game-log/:playerId', async (req, res) => {
+  const { playerId } = req.params;
+  const season = req.query.season || 2026;
+
+  try {
+    let url = `https://statsapi.mlb.com/api/v1/people/${playerId}/stats?stats=gameLog&season=${season}&group=hitting`;
+    let response = await fetch(url);
+    let data = await response.json();
+    let games = data?.stats?.[0]?.splits || [];
+
+    // Se não tiver dados em 2026, tenta 2025
+    if (!games.length && season == 2026) {
+      url = `https://statsapi.mlb.com/api/v1/people/${playerId}/stats?stats=gameLog&season=2025&group=hitting`;
+      response = await fetch(url);
+      data = await response.json();
+      games = data?.stats?.[0]?.splits || [];
+    }
+
+    // Pega os últimos 15 jogos
+    const last15 = games.slice(-15).map(g => ({
+      date: g.date,
+      hits: parseInt(g.stat?.hits) || 0,
+      atBats: parseInt(g.stat?.atBats) || 0,
+      homeRuns: parseInt(g.stat?.homeRuns) || 0,
+      rbi: parseInt(g.stat?.rbi) || 0,
+      runs: parseInt(g.stat?.runs) || 0,
+      doubles: parseInt(g.stat?.doubles) || 0,
+      triples: parseInt(g.stat?.triples) || 0,
+      stolenBases: parseInt(g.stat?.stolenBases) || 0,
+      totalBases: parseInt(g.stat?.totalBases) || 0,
+    }));
+
+    // Calcula hit rates
+    const hitRate = (line) => {
+      if (!last15.length) return null;
+      const count = last15.filter(g => g.hits > line).length;
+      return Math.round((count / last15.length) * 100);
+    };
+
+    const hrRate = (line) => {
+      if (!last15.length) return null;
+      const count = last15.filter(g => g.homeRuns > line).length;
+      return Math.round((count / last15.length) * 100);
+    };
+
+    const rbiRate = (line) => {
+      if (!last15.length) return null;
+      const count = last15.filter(g => g.rbi > line).length;
+      return Math.round((count / last15.length) * 100);
+    };
+
+    const tbRate = (line) => {
+      if (!last15.length) return null;
+      const count = last15.filter(g => g.totalBases > line).length;
+      return Math.round((count / last15.length) * 100);
+    };
+
+    // Médias dos últimos 15 jogos
+    const avg = (field) => last15.length
+      ? (last15.reduce((s, g) => s + g[field], 0) / last15.length).toFixed(2)
+      : '0.00';
+
+    res.json({
+      games: last15,
+      totalGames: last15.length,
+      hitRates: {
+        hits_over_0_5: hitRate(0),
+        hits_over_1_5: hitRate(1),
+        hits_over_2_5: hitRate(2),
+        hr_over_0_5: hrRate(0),
+        rbi_over_0_5: rbiRate(0),
+        rbi_over_1_5: rbiRate(1),
+        tb_over_1_5: tbRate(1),
+        tb_over_2_5: tbRate(2),
+        runs_over_0_5: (() => { const c = last15.filter(g => g.runs > 0).length; return last15.length ? Math.round((c/last15.length)*100) : null; })(),
+        sb_over_0_5: (() => { const c = last15.filter(g => g.stolenBases > 0).length; return last15.length ? Math.round((c/last15.length)*100) : null; })(),
+      },
+      recentAvg: {
+        hitsPerGame: avg('hits'),
+        hrPerGame: avg('homeRuns'),
+        rbiPerGame: avg('rbi'),
+        tbPerGame: avg('totalBases'),
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro ao buscar game log' });
+  }
+});
+
 // ── Gerar Apostas via Groq ─────────────────────────────────
 app.post('/api/gerar-apostas', async (req, res) => {
-  const { players, teamName } = req.body;
+  const { players, teamName, gameLogs } = req.body;
   if (!players || !teamName) return res.status(400).json({ error: 'Dados inválidos' });
 
   if (!GROQ_API_KEY) return res.status(500).json({ error: 'GROQ_API_KEY não configurada' });
@@ -81,23 +173,42 @@ app.post('/api/gerar-apostas', async (req, res) => {
     .sort((a, b) => (b.ops || 0) - (a.ops || 0))
     .slice(0, 20);
 
-  const prompt = `Você é um analista profissional de apostas esportivas especializado em MLB.
-Analise as estatísticas dos jogadores do time ${teamName} e gere até 5 sugestões de apostas.
+  // Monta dados enriquecidos com game log
+  const enriched = top20.map(p => {
+    const log = gameLogs?.[p.id];
+    return {
+      ...p,
+      recentForm: log ? {
+        lastGames: log.totalGames,
+        avgHitsRecent: log.recentAvg.hitsPerGame,
+        avgHRRecent: log.recentAvg.hrPerGame,
+        avgRBIRecent: log.recentAvg.rbiPerGame,
+        hitRates: log.hitRates,
+      } : null
+    };
+  });
 
-JOGADORES (top 20 por OPS):
-${JSON.stringify(top20, null, 2)}
+  const prompt = `Você é um analista profissional de apostas esportivas especializado em MLB.
+Analise as estatísticas dos jogadores do time ${teamName} e gere até 5 sugestões de apostas VARIADAS.
+
+JOGADORES (top 20 por OPS) com forma recente dos últimos 15 jogos:
+${JSON.stringify(enriched, null, 2)}
 
 REGRAS:
-- Use hitsPerGame, hrPerGame, rbiPerGame vs linhas do mercado
-- Hits: linha 0.5 ou 1.5 | Total Bases: 1.5 ou 2.5 | HR: 0.5 | RBI: 0.5 ou 1.5 | Runs: 0.5
+- Use hitsPerGame, hrPerGame, rbiPerGame da temporada E os dados de recentForm (últimos 15 jogos)
+- Priorize jogadores onde a média recente (recentForm) confirma ou supera a média da temporada
+- Use hitRates para validar: se a taxa histórica for >= 60% nos últimos 15 jogos, é um bom sinal
+- IMPORTANTE: Varie os tipos de aposta! Não gere só hits. Use também: Home Runs, RBIs, Runs, Total Bases, Bases Roubadas
+- Linhas aceitas: Hits 0.5/1.5/2.5 | Home Runs 0.5 | RBI 0.5/1.5 | Runs 0.5 | Total Bases 1.5/2.5 | Bases Roubadas 0.5
 - IMPORTANTE: Gere APENAS apostas com probabilidade ACIMA de 70%
-- type: lock (>80%), mid (70-80%) — NÃO inclua apostas fire ou abaixo de 70%
+- type: lock (>80%), mid (70-80%) — NÃO inclua apostas abaixo de 70%
 - Só jogadores com games >= 8
-- Máximo 5 sugestões, apenas as mais confiáveis
+- Máximo 5 sugestões de tipos DIFERENTES — evite repetir o mesmo tipo de aposta
 - Se não houver apostas acima de 70%, retorne lista vazia
+- No campo hitRate inclua o % histórico real dos últimos jogos para aquela linha específica
 
 Responda SOMENTE JSON válido sem markdown:
-{"suggestions":[{"type":"lock|mid","player":"Nome","betType":"Tipo em pt-BR","line":"ex: 1.5 Hits","direction":"over|under","probability":78,"justification":"máx 2 frases"}]}`;
+{"suggestions":[{"type":"lock|mid","player":"Nome","betType":"Tipo em pt-BR","line":"ex: 1.5 Hits","direction":"over|under","probability":78,"hitRate":73,"justification":"máx 2 frases"}]}`;
 
   try {
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -108,7 +219,7 @@ Responda SOMENTE JSON válido sem markdown:
       },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
-        max_tokens: 1000,
+        max_tokens: 1200,
         messages: [{ role: 'user', content: prompt }]
       })
     });
