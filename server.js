@@ -171,7 +171,7 @@ app.post('/api/gerar-apostas', async (req, res) => {
 
   const top20 = [...players]
     .sort((a, b) => (b.ops || 0) - (a.ops || 0))
-    .slice(0, 20);
+    .slice(0, 8);
 
   // Monta dados enriquecidos com game log
   const enriched = top20.map(p => {
@@ -191,7 +191,7 @@ app.post('/api/gerar-apostas', async (req, res) => {
   const prompt = `Você é um analista profissional de apostas esportivas especializado em MLB.
 Analise as estatísticas dos jogadores do time ${teamName} e gere até 5 sugestões de apostas VARIADAS.
 
-JOGADORES (top 20 por OPS) com forma recente dos últimos 15 jogos:
+JOGADORES (top 8 por OPS) com forma recente dos últimos 15 jogos:
 ${JSON.stringify(enriched, null, 2)}
 
 REGRAS:
