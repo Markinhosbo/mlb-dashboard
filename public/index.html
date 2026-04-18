@@ -52,15 +52,16 @@
     .status-text { font-size: 12px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
 
     /* TEAM HERO */
-    .team-hero { border-radius: 20px; padding: 24px 28px; margin-bottom: 24px; display: flex; align-items: center; gap: 24px; position: relative; overflow: visible; border: 1px solid var(--border); flex-wrap: wrap; }
-    .team-logo-big { width: 110px; height: 110px; border-radius: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: rgba(255,255,255,.95); padding: 10px; border: 1px solid rgba(255,255,255,.2); overflow: hidden; }
-    .team-hero-info { flex: 1; min-width: 160px; }
-    .team-hero-name { font-family: 'Bebas Neue', sans-serif; font-size: 40px; letter-spacing: .06em; color: white; line-height: 1; }
-    .team-hero-meta { font-size: 13px; color: rgba(255,255,255,.6); margin-top: 6px; }
-    .team-hero-season { background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2); border-radius: 8px; padding: 3px 12px; font-size: 12px; color: rgba(255,255,255,.8); display: inline-block; margin-top: 8px; }
-    .hero-stats { display: flex; gap: 24px; flex-wrap: wrap; }
+    .team-hero { border-radius: 20px; padding: 20px 24px; margin-bottom: 24px; display: flex; align-items: center; gap: 20px; position: relative; overflow: hidden; border: 1px solid var(--border); flex-wrap: nowrap; }
+    .team-logo-big { width: 80px; height: 80px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: rgba(255,255,255,.95); padding: 8px; border: 1px solid rgba(255,255,255,.2); overflow: hidden; }
+    .team-logo-big img { width: 64px; height: 64px; object-fit: contain; }
+    .team-hero-info { flex: 1; min-width: 140px; }
+    .team-hero-name { font-family: 'Bebas Neue', sans-serif; font-size: 32px; letter-spacing: .06em; color: white; line-height: 1; }
+    .team-hero-meta { font-size: 12px; color: rgba(255,255,255,.6); margin-top: 4px; }
+    .team-hero-season { background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2); border-radius: 8px; padding: 3px 12px; font-size: 11px; color: rgba(255,255,255,.8); display: inline-block; margin-top: 6px; }
+    .hero-stats { display: flex; gap: 28px; flex-wrap: nowrap; align-items: center; margin-left: 8px; padding-left: 24px; border-left: 1px solid rgba(255,255,255,.15); }
     .hero-stat { text-align: center; }
-    .hero-stat-val { font-family: 'Bebas Neue', sans-serif; font-size: 32px; color: white; }
+    .hero-stat-val { font-family: 'Bebas Neue', sans-serif; font-size: 28px; color: white; }
     .hero-stat-lbl { font-size: 10px; color: rgba(255,255,255,.5); text-transform: uppercase; letter-spacing: .08em; margin-top: 2px; }
 
     /* CHARTS */
@@ -322,7 +323,7 @@ async function loadStats() {
     heroEl.style.display = 'flex';
     heroEl.style.background = heroBg;
     heroEl.innerHTML = `
-      <div class="team-logo-big"><img src="https://www.mlbstatic.com/team-logos/${team.id}.svg" alt="${team.name}" style="width:84px;height:84px;object-fit:contain;" onerror="this.style.display='none'"></div>
+      <div class="team-logo-big"><img src="https://www.mlbstatic.com/team-logos/${team.id}.svg" alt="${team.name}" onerror="this.style.display='none'"></div>
       <div class="team-hero-info">
         <div class="team-hero-name">${team.name}</div>
         <div class="team-hero-meta">${team.city} · ${team.abbr}</div>
