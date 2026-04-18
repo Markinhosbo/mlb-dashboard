@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MLB Stats Dashboard 2026</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --red: #D50032; --bg: #060b18; --surface: #0e1829;
+      --surface2: #162033; --border: #1e2e47; --text: #e8edf5; --muted: #6b7a99;
+    }
+    body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    body::before { content: ''; position: fixed; inset: 0; background-image: linear-gradient(rgba(255,255,255,.012) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.012) 1px, transparent 1px); background-size: 44px 44px; pointer-events: none; z-index: 0; }
+
+    /* TOPBAR */
+    .topbar { background: linear-gradient(135deg, #001A3D 0%, #002D62 60%, #8B0000 100%); border-bottom: 3px solid var(--red); padding: 0 32px; display: flex; align-items: center; justify-content: space-between; height: 64px; position: relative; z-index: 10; }
+    .topbar-left { display: flex; align-items: center; gap: 18px; }
+    .mlb-logo { width: 72px; height: 44px; object-fit: contain; }
+    .topbar-title { font-family: 'Bebas Neue', sans-serif; font-size: 26px; letter-spacing: .1em; color: white; }
+    .topbar-title span { color: #FF6B6B; }
+    .topbar-right { display: flex; align-items: center; gap: 14px; }
+    .live-badge { display: flex; align-items: center; gap: 7px; background: rgba(213,0,50,.18); border: 1px solid rgba(213,0,50,.5); border-radius: 20px; padding: 5px 14px; }
+    .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #D50032; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.3)} }
+    .live-badge span { font-size: 11px; color: #ffb3b3; text-transform: uppercase; letter-spacing: .07em; font-weight: 600; }
+    .season-pill { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2); border-radius: 20px; padding: 5px 14px; font-size: 12px; color: rgba(255,255,255,.8); font-weight: 500; }
+
+    /* MAIN */
+    .main { position: relative; z-index: 1; max-width: 1240px; margin: 0 auto; padding: 28px 24px; }
+
+    /* CONTROLS */
+    .controls-card { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 20px 24px; margin-bottom: 24px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .controls-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
+    .team-select-wrap { position: relative; flex: 1; min-width: 260px; max-width: 420px; }
+    .team-select-wrap select { width: 100%; height: 46px; padding: 0 16px 0 50px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); color: var(--text); font-size: 15px; font-family: 'DM Sans', sans-serif; cursor: pointer; outline: none; appearance: none; transition: border-color .2s; }
+    .team-select-wrap select:focus, .team-select-wrap select:hover { border-color: var(--red); }
+    .team-select-wrap select option { background: var(--surface); }
+    .select-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 20px; pointer-events: none; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; }
+    .select-arrow { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--muted); font-size: 12px; }
+    .btn-refresh { height: 46px; padding: 0 22px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface2); color: var(--text); font-size: 13px; font-weight: 600; font-family: 'DM Sans', sans-serif; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all .2s; white-space: nowrap; }
+    .btn-refresh:hover { background: var(--red); border-color: var(--red); color: white; }
+    .btn-refresh.loading { opacity: .5; pointer-events: none; }
+    .auto-wrap { display: flex; align-items: center; gap: 8px; }
+    .auto-wrap label { font-size: 13px; color: var(--muted); cursor: pointer; }
+    input[type=checkbox] { cursor: pointer; accent-color: var(--red); width: 15px; height: 15px; }
+    .status-wrap { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; animation: pulse 2s infinite; }
+    .status-dot.offline { background: #ef4444; animation: none; }
+    .status-dot.warn { background: #f59e0b; animation: none; }
+    .status-text { font-size: 12px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+
+    /* TEAM HERO */
+    .team-hero { border-radius: 20px; padding: 24px 28px; margin-bottom: 24px; display: flex; align-items: center; gap: 24px; position: relative; overflow: visible; border: 1px solid var(--border); flex-wrap: wrap; }
+    .team-logo-big { width: 110px; height: 110px; border-radius: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: rgba(255,255,255,.95); padding: 10px; border: 1px solid rgba(255,255,255,.2); overflow: hidden; }
+    .team-hero-info { flex: 1; min-width: 160px; }
+    .team-hero-name { font-family: 'Bebas Neue', sans-serif; font-size: 40px; letter-spacing: .06em; color: white; line-height: 1; }
+    .team-hero-meta { font-size: 13px; color: rgba(255,255,255,.6); margin-top: 6px; }
+    .team-hero-season { background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2); border-radius: 8px; padding: 3px 12px; font-size: 12px; color: rgba(255,255,255,.8); display: inline-block; margin-top: 8px; }
+    .hero-stats { display: flex; gap: 24px; flex-wrap: wrap; }
+    .hero-stat { text-align: center; }
+    .hero-stat-val { font-family: 'Bebas Neue', sans-serif; font-size: 32px; color: white; }
+    .hero-stat-lbl { font-size: 10px; color: rgba(255,255,255,.5); text-transform: uppercase; letter-spacing: .08em; margin-top: 2px; }
+
+    /* CHARTS */
+    .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .chart-card { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 20px 22px; position: relative; overflow: hidden; }
+    .chart-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--card-accent, var(--red)); }
+    .chart-card-title { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 18px; display: flex; align-items: center; gap: 8px; }
+    .stat-icon { width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; background: var(--card-accent-dim, rgba(213,0,50,.15)); }
+    .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .bar-rank { width: 20px; font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; text-align: right; flex-shrink: 0; }
+    .bar-name { font-size: 13px; color: var(--text); width: 112px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .bar-track { flex: 1; background: rgba(255,255,255,.05); border-radius: 6px; height: 28px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 6px; display: flex; align-items: center; justify-content: flex-end; padding-right: 10px; transition: width .7s cubic-bezier(.4,0,.2,1); min-width: 38px; }
+    .bar-val { font-size: 12px; font-weight: 700; color: white; font-family: 'JetBrains Mono', monospace; }
+    .notice { grid-column: 1 / -1; background: rgba(245,158,11,.08); border: 1px solid rgba(245,158,11,.3); border-radius: 10px; padding: 10px 16px; font-size: 13px; color: #f59e0b; }
+    .empty-state { grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: var(--muted); }
+    .empty-icon { font-size: 52px; margin-bottom: 16px; display: block; }
+    .empty-title { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: .06em; color: var(--text); margin-bottom: 6px; }
+    .empty-sub { font-size: 13px; }
+    .spin { display: inline-block; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* FOOTER */
+    .footer { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: var(--muted); }
+
+    /* BETTING BUTTON */
+    .btn-bet { height: 46px; padding: 0 26px; border: none; border-radius: 12px; background: linear-gradient(135deg, #f59e0b, #ef4444); color: white; font-size: 14px; font-weight: 700; font-family: 'DM Sans', sans-serif; cursor: pointer; display: flex; align-items: center; gap: 9px; transition: all .2s; white-space: nowrap; box-shadow: 0 4px 18px rgba(239,68,68,.35); }
+    .btn-bet:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(239,68,68,.5); }
+    .btn-bet:disabled { opacity: .5; pointer-events: none; }
+
+    /* BETTING PANEL */
+    #bettingPanel { margin-bottom: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 20px; overflow: hidden; display: none; }
+    .bet-panel-header { background: linear-gradient(135deg, #1a0a00 0%, #2d1500 60%, #1a0010 100%); border-bottom: 2px solid rgba(245,158,11,.3); padding: 18px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .bet-panel-title { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: .08em; color: #f59e0b; display: flex; align-items: center; gap: 10px; }
+    .bet-panel-sub { font-size: 12px; color: rgba(245,158,11,.6); margin-top: 2px; }
+    .bet-close { background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12); border-radius: 8px; color: var(--muted); font-size: 16px; width: 32px; height: 32px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .2s; }
+    .bet-close:hover { background: rgba(239,68,68,.2); color: #ef4444; border-color: #ef4444; }
+    .bet-body { padding: 22px 24px; }
+    .bet-loading { display: flex; flex-direction: column; align-items: center; padding: 40px 20px; gap: 16px; color: var(--muted); }
+    .bet-loading-bar { width: 260px; height: 4px; background: rgba(255,255,255,.07); border-radius: 4px; overflow: hidden; }
+    .bet-loading-fill { height: 100%; width: 0%; border-radius: 4px; background: linear-gradient(90deg, #f59e0b, #ef4444); animation: betLoad 3s ease-in-out forwards; }
+    @keyframes betLoad { 0%{width:0%} 40%{width:55%} 80%{width:82%} 100%{width:95%} }
+    .bet-loading-txt { font-size: 13px; font-family: 'JetBrains Mono', monospace; }
+    .bet-cards { display: flex; flex-direction: column; gap: 14px; }
+    .bet-card { border-radius: 14px; border: 1px solid; padding: 18px 20px; position: relative; overflow: hidden; }
+    .bet-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
+    .bet-card.lock { background: rgba(34,197,94,.06); border-color: rgba(34,197,94,.25); }
+    .bet-card.lock::before { background: #22c55e; }
+    .bet-card.mid { background: rgba(245,158,11,.06); border-color: rgba(245,158,11,.25); }
+    .bet-card.mid::before { background: #f59e0b; }
+    .bet-card.fire { background: rgba(239,68,68,.06); border-color: rgba(239,68,68,.25); }
+    .bet-card.fire::before { background: #ef4444; }
+    .bet-card-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; gap: 12px; }
+    .bet-card-left { flex: 1; }
+    .bet-badge { display: inline-flex; align-items: center; gap: 5px; border-radius: 20px; padding: 3px 11px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 7px; }
+    .lock .bet-badge { background: rgba(34,197,94,.15); color: #22c55e; border: 1px solid rgba(34,197,94,.3); }
+    .mid  .bet-badge { background: rgba(245,158,11,.15); color: #f59e0b; border: 1px solid rgba(245,158,11,.3); }
+    .fire .bet-badge { background: rgba(239,68,68,.15); color: #ef4444; border: 1px solid rgba(239,68,68,.3); }
+    .bet-player { font-size: 18px; font-weight: 700; color: var(--text); line-height: 1.1; }
+    .bet-type   { font-size: 12px; color: var(--muted); margin-top: 3px; }
+    .bet-prob-wrap { text-align: right; flex-shrink: 0; }
+    .bet-prob-num { font-family: 'Bebas Neue', sans-serif; font-size: 36px; line-height: 1; }
+    .lock .bet-prob-num { color: #22c55e; }
+    .mid  .bet-prob-num { color: #f59e0b; }
+    .fire .bet-prob-num { color: #ef4444; }
+    .bet-prob-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; }
+    .bet-line-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .bet-line-pill { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); border-radius: 6px; padding: 3px 10px; font-size: 12px; font-weight: 700; color: var(--text); font-family: 'JetBrains Mono', monospace; }
+    .bet-direction { font-size: 11px; font-weight: 700; letter-spacing: .05em; padding: 3px 10px; border-radius: 6px; }
+    .bet-direction.over  { background: rgba(34,197,94,.15); color: #22c55e; }
+    .bet-direction.under { background: rgba(239,68,68,.15); color: #ef4444; }
+    .bet-justification { font-size: 13px; line-height: 1.6; color: rgba(232,237,245,.75); border-top: 1px solid rgba(255,255,255,.06); padding-top: 10px; margin-top: 4px; }
+    .bet-disclaimer { margin-top: 18px; padding: 12px 16px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.07); border-radius: 10px; font-size: 11px; color: var(--muted); line-height: 1.5; text-align: center; }
+    .bet-error { text-align: center; padding: 30px 20px; color: #ef4444; font-size: 14px; line-height: 1.6; }
+
+    @media (max-width: 720px) {
+      .charts-grid { grid-template-columns: 1fr; }
+      .team-hero { flex-direction: column; text-align: center; }
+      .hero-stats { flex-wrap: wrap; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <img class="mlb-logo" src="https://www.mlbstatic.com/team-logos/league-on-dark/1.svg" alt="MLB" onerror="this.style.display='none'">
+    <div class="topbar-title">Stats <span>Dashboard</span></div>
+  </div>
+  <div class="topbar-right">
+    <div class="live-badge"><div class="live-dot"></div><span>Ao vivo</span></div>
+    <div class="season-pill">⚾ Temporada 2026</div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="controls-card">
+    <span class="controls-label">Time</span>
+    <div class="team-select-wrap">
+      <span class="select-icon">
+        <img id="selectLogoImg" src="" alt="" style="width:28px;height:28px;object-fit:contain;display:none;">
+        <span id="selectLogoFallback" style="font-size:18px;">⚾</span>
+      </span>
+      <select id="teamSelect">
+        <option value="">— Selecionar franquia —</option>
+      </select>
+      <span class="select-arrow">▾</span>
+    </div>
+    <button class="btn-refresh" id="btnRefresh" onclick="loadStats()">
+      <span id="refreshIcon">↻</span> Atualizar
+    </button>
+    <div class="auto-wrap">
+      <input type="checkbox" id="autoRefresh" onchange="toggleAuto()">
+      <label for="autoRefresh">Auto 30s</label>
+    </div>
+    <div class="status-wrap">
+      <div class="status-dot" id="statusDot"></div>
+      <span class="status-text" id="statusText">Pronto</span>
+    </div>
+  </div>
+
+  <div id="teamHero" style="display:none;"></div>
+
+  <div id="bettingPanel">
+    <div class="bet-panel-header">
+      <div>
+        <div class="bet-panel-title">🎯 Análise de Apostas — <span id="betTeamName">—</span></div>
+        <div class="bet-panel-sub">Sugestões geradas por IA com base nas estatísticas da temporada</div>
+      </div>
+      <button class="bet-close" onclick="closeBetting()">✕</button>
+    </div>
+    <div class="bet-body" id="betBody"></div>
+  </div>
+
+  <div id="charts" class="charts-grid">
+    <div class="empty-state">
+      <span class="empty-icon">⚾</span>
+      <div class="empty-title">Selecione uma franquia</div>
+      <div class="empty-sub">Escolha um time para ver as estatísticas da temporada</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>⚾ MLB Stats API — statsapi.mlb.com — dados oficiais</span>
+    <span id="footerTime"></span>
+  </div>
+</div>
+
+<script>
+let autoTimer = null, currentPlayers = [], currentTeam = null;
+
+const TEAMS = [
+  {id:108,name:'Los Angeles Angels',city:'Los Angeles',abbr:'LAA',primary:'#BA0021',secondary:'#003263'},
+  {id:109,name:'Arizona Diamondbacks',city:'Arizona',abbr:'ARI',primary:'#A71930',secondary:'#E3D4AD'},
+  {id:110,name:'Baltimore Orioles',city:'Baltimore',abbr:'BAL',primary:'#DF4601',secondary:'#27251F'},
+  {id:111,name:'Boston Red Sox',city:'Boston',abbr:'BOS',primary:'#BD3039',secondary:'#0D2B56'},
+  {id:112,name:'Chicago Cubs',city:'Chicago',abbr:'CHC',primary:'#0E3386',secondary:'#CC3433'},
+  {id:113,name:'Cincinnati Reds',city:'Cincinnati',abbr:'CIN',primary:'#C6011F',secondary:'#000000'},
+  {id:114,name:'Cleveland Guardians',city:'Cleveland',abbr:'CLE',primary:'#00385D',secondary:'#E31937'},
+  {id:115,name:'Colorado Rockies',city:'Colorado',abbr:'COL',primary:'#33006F',secondary:'#C4CED4'},
+  {id:116,name:'Detroit Tigers',city:'Detroit',abbr:'DET',primary:'#0C2340',secondary:'#FA4616'},
+  {id:117,name:'Houston Astros',city:'Houston',abbr:'HOU',primary:'#002D62',secondary:'#EB6E1F'},
+  {id:118,name:'Kansas City Royals',city:'Kansas City',abbr:'KC',primary:'#004687',secondary:'#C09A5B'},
+  {id:119,name:'Los Angeles Dodgers',city:'Los Angeles',abbr:'LAD',primary:'#005A9C',secondary:'#EF3E42'},
+  {id:120,name:'Washington Nationals',city:'Washington',abbr:'WSH',primary:'#AB0003',secondary:'#14225A'},
+  {id:121,name:'New York Mets',city:'New York',abbr:'NYM',primary:'#002D72',secondary:'#FF5910'},
+  {id:133,name:'Oakland Athletics',city:'Oakland',abbr:'OAK',primary:'#003831',secondary:'#EFB21E'},
+  {id:134,name:'Pittsburgh Pirates',city:'Pittsburgh',abbr:'PIT',primary:'#27251F',secondary:'#FDB827'},
+  {id:135,name:'San Diego Padres',city:'San Diego',abbr:'SD',primary:'#2F241D',secondary:'#FFC425'},
+  {id:136,name:'Seattle Mariners',city:'Seattle',abbr:'SEA',primary:'#0C2C56',secondary:'#005C5C'},
+  {id:137,name:'San Francisco Giants',city:'San Francisco',abbr:'SF',primary:'#FD5A1E',secondary:'#27251F'},
+  {id:138,name:'St. Louis Cardinals',city:'St. Louis',abbr:'STL',primary:'#C41E3A',secondary:'#0C2340'},
+  {id:139,name:'Tampa Bay Rays',city:'Tampa Bay',abbr:'TB',primary:'#092C5C',secondary:'#8FBCE6'},
+  {id:140,name:'Texas Rangers',city:'Texas',abbr:'TEX',primary:'#003278',secondary:'#C0111F'},
+  {id:141,name:'Toronto Blue Jays',city:'Toronto',abbr:'TOR',primary:'#134A8E',secondary:'#1D2D5C'},
+  {id:142,name:'Minnesota Twins',city:'Minnesota',abbr:'MIN',primary:'#002B5C',secondary:'#D31145'},
+  {id:143,name:'Philadelphia Phillies',city:'Philadelphia',abbr:'PHI',primary:'#E81828',secondary:'#002D72'},
+  {id:144,name:'Atlanta Braves',city:'Atlanta',abbr:'ATL',primary:'#CE1141',secondary:'#13274F'},
+  {id:145,name:'Chicago White Sox',city:'Chicago',abbr:'CWS',primary:'#27251F',secondary:'#C4CED4'},
+  {id:146,name:'Miami Marlins',city:'Miami',abbr:'MIA',primary:'#00A3E0',secondary:'#EF3340'},
+  {id:147,name:'New York Yankees',city:'New York',abbr:'NYY',primary:'#132448',secondary:'#C4CED4'},
+  {id:158,name:'Milwaukee Brewers',city:'Milwaukee',abbr:'MIL',primary:'#12284B',secondary:'#FFC52F'},
+].sort((a,b) => a.name.localeCompare(b.name));
+
+const sel = document.getElementById('teamSelect');
+TEAMS.forEach(t => {
+  const o = document.createElement('option');
+  o.value = t.id; o.textContent = t.name;
+  sel.appendChild(o);
+});
+sel.addEventListener('change', () => {
+  const li = document.getElementById('selectLogoImg'), lf = document.getElementById('selectLogoFallback');
+  if (sel.value) {
+    li.src = `https://www.mlbstatic.com/team-logos/${sel.value}.svg`;
+    li.style.display = 'block'; lf.style.display = 'none';
+    loadStats();
+  } else { li.style.display = 'none'; lf.style.display = 'inline'; }
+});
+
+function getTeam(id) { return TEAMS.find(t => t.id == id); }
+function setStatus(s, m) {
+  const d = document.getElementById('statusDot');
+  d.className = 'status-dot' + (s==='ok' ? '' : s==='warn' ? ' warn' : ' offline');
+  document.getElementById('statusText').textContent = m;
+}
+
+function barChart(label, color, dimColor, icon, players, field, isDec=false) {
+  const sorted = [...players].filter(p => (p[field]||0) > 0).sort((a,b) => (b[field]||0)-(a[field]||0)).slice(0,5);
+  if (!sorted.length) return '';
+  const max = sorted[0][field] || 1;
+  const bars = sorted.map((p,i) => {
+    const val = p[field] || 0;
+    const pct = Math.round((val/max)*100);
+    const disp = isDec ? String(val).replace(/^0/,'') : val;
+    const parts = p.name.split(' ');
+    const name = parts.length > 1 ? parts[0][0]+'. '+parts.slice(1).join(' ') : p.name;
+    return `<div class="bar-row">
+      <span class="bar-rank">${i+1}</span>
+      <span class="bar-name" title="${p.name}">${name}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color}">
+        <span class="bar-val">${disp}</span>
+      </div></div>
+    </div>`;
+  }).join('');
+  return `<div class="chart-card" style="--card-accent:${color};--card-accent-dim:${dimColor};">
+    <div class="chart-card-title"><div class="stat-icon">${icon}</div>${label}</div>
+    ${bars}
+  </div>`;
+}
+
+async function loadStats() {
+  const teamId = sel.value;
+  if (!teamId) return;
+  const team = getTeam(teamId);
+  const btn = document.getElementById('btnRefresh');
+  btn.classList.add('loading');
+  document.getElementById('refreshIcon').innerHTML = '<span class="spin">↻</span>';
+  setStatus('ok', 'Buscando dados...');
+  const chartsDiv = document.getElementById('charts');
+  chartsDiv.innerHTML = `<div class="empty-state"><span class="spin" style="font-size:40px;display:block;margin-bottom:16px;">↻</span><div class="empty-title">Carregando</div><div class="empty-sub">Buscando estatísticas de ${team.name}...</div></div>`;
+
+  try {
+    const res = await fetch(`/api/mlb-stats?teamId=${teamId}&season=2026`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    const { players, season } = data;
+    if (!players.length) throw new Error('Nenhum dado disponível');
+
+    currentPlayers = players;
+    currentTeam = team;
+
+    const allHits = players.reduce((s,p) => s+(p.hits||0), 0);
+    const allHR   = players.reduce((s,p) => s+(p.homeRuns||0), 0);
+    const allRBI  = players.reduce((s,p) => s+(p.rbi||0), 0);
+    const heroBg  = `linear-gradient(135deg, ${team.primary}ee 0%, ${team.primary}99 50%, ${team.secondary}66 100%)`;
+
+    const heroEl = document.getElementById('teamHero');
+    heroEl.style.display = 'flex';
+    heroEl.style.background = heroBg;
+    heroEl.innerHTML = `
+      <div class="team-logo-big"><img src="https://www.mlbstatic.com/team-logos/${team.id}.svg" alt="${team.name}" style="width:84px;height:84px;object-fit:contain;" onerror="this.style.display='none'"></div>
+      <div class="team-hero-info">
+        <div class="team-hero-name">${team.name}</div>
+        <div class="team-hero-meta">${team.city} · ${team.abbr}</div>
+        <div class="team-hero-season">⚾ Temporada ${season} · ${players.length} jogadores analisados</div>
+      </div>
+      <div class="hero-stats">
+        <div class="hero-stat"><div class="hero-stat-val">${allHits}</div><div class="hero-stat-lbl">Total Hits</div></div>
+        <div class="hero-stat"><div class="hero-stat-val">${allHR}</div><div class="hero-stat-lbl">Home Runs</div></div>
+        <div class="hero-stat"><div class="hero-stat-val">${allRBI}</div><div class="hero-stat-lbl">RBIs</div></div>
+      </div>
+      <div style="flex-shrink:0;">
+        <button class="btn-bet" onclick="generateBetting()">🎯 Gerar Aposta</button>
+      </div>`;
+
+    let notice = season === 2025 ? `<div class="notice">⚠ Exibindo temporada 2025 — dados de 2026 insuficientes.</div>` : '';
+    chartsDiv.innerHTML = `
+      ${notice}
+      ${barChart('Jogadores com mais Hits', team.primary, team.primary+'22', '🎯', players, 'hits')}
+      ${barChart('Jogadores com mais Runs', '#E24B4A', '#E24B4A22', '🏃', players, 'runs')}
+      ${barChart('Jogadores com mais RBIs', '#1D9E75', '#1D9E7522', '💪', players, 'rbi')}
+      ${barChart('Home Runs', '#EF9F27', '#EF9F2722', '💥', players, 'homeRuns')}
+      ${barChart('Média de Rebatidas (AVG)', '#378ADD', '#378ADD22', '📊', players, 'avg', true)}
+      ${barChart('Bases Roubadas', '#D4537E', '#D4537E22', '⚡', players, 'stolenBases')}`;
+
+    const now = new Date().toLocaleTimeString('pt-BR');
+    document.getElementById('footerTime').textContent = 'Atualizado às ' + now;
+    setStatus('ok', 'Atualizado às ' + now);
+  } catch(e) {
+    document.getElementById('teamHero').style.display = 'none';
+    chartsDiv.innerHTML = `<div class="empty-state"><span class="empty-icon">⚠️</span><div class="empty-title">Erro ao carregar</div><div class="empty-sub">${e.message}</div></div>`;
+    setStatus('offline', 'Erro na conexão');
+  }
+  btn.classList.remove('loading');
+  document.getElementById('refreshIcon').textContent = '↻';
+}
+
+function toggleAuto() {
+  const on = document.getElementById('autoRefresh').checked;
+  if (on) { loadStats(); autoTimer = setInterval(loadStats, 30000); }
+  else { clearInterval(autoTimer); autoTimer = null; }
+}
+
+function closeBetting() { document.getElementById('bettingPanel').style.display = 'none'; }
+
+async function generateBetting() {
+  if (!currentPlayers.length || !currentTeam) return;
+  const panel = document.getElementById('bettingPanel');
+  const body  = document.getElementById('betBody');
+  document.getElementById('betTeamName').textContent = currentTeam.name;
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  body.innerHTML = `<div class="bet-loading"><div style="font-size:32px;">🔍</div><div class="bet-loading-txt">Analisando estatísticas com IA...</div><div class="bet-loading-bar"><div class="bet-loading-fill"></div></div><div style="font-size:12px;color:var(--muted);margin-top:4px;">Isso pode levar alguns segundos</div></div>`;
+
+  try {
+    const res = await fetch('/api/gerar-apostas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ players: currentPlayers, teamName: currentTeam.name })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    const suggestions = (data.suggestions || [])
+      .filter(s => s.probability >= 70)
+      .sort((a, b) => b.probability - a.probability);
+    if (!suggestions.length) throw new Error('Nenhuma aposta com probabilidade acima de 70% encontrada para este time no momento.');
+
+    const typeLabel = { lock: '🔒 Alta Probabilidade', mid: '⚖️ Probabilidade Média', fire: '🔥 Alto Risco / Alto Retorno' };
+    const cards = suggestions.map(s => `
+      <div class="bet-card ${s.type}">
+        <div class="bet-card-top">
+          <div class="bet-card-left">
+            <div class="bet-badge">${typeLabel[s.type] || s.type}</div>
+            <div class="bet-player">${s.player}</div>
+            <div class="bet-type">${s.betType}</div>
+          </div>
+          <div class="bet-prob-wrap">
+            <div class="bet-prob-num">${s.probability}%</div>
+            <div class="bet-prob-lbl">Probabilidade</div>
+          </div>
+        </div>
+        <div class="bet-line-row">
+          <span class="bet-line-pill">${s.line}</span>
+          <span class="bet-direction ${s.direction}">${s.direction === 'over' ? '▲ OVER' : '▼ UNDER'}</span>
+        </div>
+        <div class="bet-justification">${s.justification}</div>
+      </div>`).join('');
+
+    body.innerHTML = `
+      <div class="bet-cards">${cards}</div>
+      <div class="bet-disclaimer">⚠️ Sugestões geradas por IA com base em estatísticas públicas da MLB. Apostas envolvem risco. Jogue com responsabilidade.</div>`;
+  } catch(err) {
+    body.innerHTML = `<div class="bet-error">❌ ${err.message || 'Erro ao gerar análise. Tente novamente.'}</div>`;
+  }
+}
+</script>
+</body>
+</html>
