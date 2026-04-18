@@ -211,7 +211,7 @@
 </div>
 
 <script>
-let autoTimer = null, currentPlayers = [], currentTeam = null;
+let autoTimer = null, currentPlayers = [], currentTeam = null, currentSeason = 2026;
 
 const TEAMS = [
   {id:108,name:'Los Angeles Angels',city:'Los Angeles',abbr:'LAA',primary:'#BA0021',secondary:'#003263'},
@@ -313,6 +313,7 @@ async function loadStats() {
 
     currentPlayers = players;
     currentTeam = team;
+    currentSeason = season;
 
     const allHits = players.reduce((s,p) => s+(p.hits||0), 0);
     const allHR   = players.reduce((s,p) => s+(p.homeRuns||0), 0);
@@ -376,13 +377,35 @@ async function generateBetting() {
   document.getElementById('betTeamName').textContent = currentTeam.name;
   panel.style.display = 'block';
   panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  body.innerHTML = `<div class="bet-loading"><div style="font-size:32px;">🔍</div><div class="bet-loading-txt">Analisando estatísticas com IA...</div><div class="bet-loading-bar"><div class="bet-loading-fill"></div></div><div style="font-size:12px;color:var(--muted);margin-top:4px;">Isso pode levar alguns segundos</div></div>`;
+
+  // Etapa 1: buscando game logs
+  body.innerHTML = `<div class="bet-loading"><div style="font-size:32px;">📊</div><div class="bet-loading-txt">Buscando forma recente dos jogadores...</div><div class="bet-loading-bar"><div class="bet-loading-fill"></div></div><div style="font-size:12px;color:var(--muted);margin-top:4px;">Analisando últimos 15 jogos</div></div>`;
 
   try {
+    // Busca game logs dos top 20 jogadores em paralelo
+    const top20 = [...currentPlayers].sort((a, b) => (b.ops || 0) - (a.ops || 0)).slice(0, 20);
+    const season = currentSeason || 2026;
+
+    const logResults = await Promise.allSettled(
+      top20.filter(p => p.id).map(p =>
+        fetch(`/api/game-log/${p.id}?season=${season}`).then(r => r.json()).then(d => ({ id: p.id, data: d }))
+      )
+    );
+
+    const gameLogs = {};
+    logResults.forEach(r => {
+      if (r.status === 'fulfilled' && r.value?.data && !r.value.data.error) {
+        gameLogs[r.value.id] = r.value.data;
+      }
+    });
+
+    // Etapa 2: gerando apostas com IA
+    body.innerHTML = `<div class="bet-loading"><div style="font-size:32px;">🤖</div><div class="bet-loading-txt">Analisando com IA...</div><div class="bet-loading-bar"><div class="bet-loading-fill"></div></div><div style="font-size:12px;color:var(--muted);margin-top:4px;">Cruzando dados da temporada + forma recente</div></div>`;
+
     const res = await fetch('/api/gerar-apostas', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ players: currentPlayers, teamName: currentTeam.name })
+      body: JSON.stringify({ players: currentPlayers, teamName: currentTeam.name, gameLogs })
     });
     const data = await res.json();
     if (data.error) throw new Error(data.error);
@@ -392,8 +415,16 @@ async function generateBetting() {
       .sort((a, b) => b.probability - a.probability);
     if (!suggestions.length) throw new Error('Nenhuma aposta com probabilidade acima de 70% encontrada para este time no momento.');
 
-    const typeLabel = { lock: '🔒 Alta Probabilidade', mid: '⚖️ Probabilidade Média', fire: '🔥 Alto Risco / Alto Retorno' };
-    const cards = suggestions.map(s => `
+    const typeLabel = { lock: '🔒 Alta Probabilidade', mid: '⚖️ Probabilidade Média' };
+
+    const fairOdd = (prob) => (100 / prob).toFixed(2);
+
+    const cards = suggestions.map(s => {
+      const odd = fairOdd(s.probability);
+      const hitRateHtml = s.hitRate != null
+        ? `<span style="background:rgba(255,255,255,.1);border-radius:6px;padding:2px 10px;font-size:12px;color:rgba(255,255,255,.8);">📈 Hit Rate últimos jogos: <strong>${s.hitRate}%</strong></span>`
+        : '';
+      return `
       <div class="bet-card ${s.type}">
         <div class="bet-card-top">
           <div class="bet-card-left">
@@ -409,9 +440,16 @@ async function generateBetting() {
         <div class="bet-line-row">
           <span class="bet-line-pill">${s.line}</span>
           <span class="bet-direction ${s.direction}">${s.direction === 'over' ? '▲ OVER' : '▼ UNDER'}</span>
+          ${hitRateHtml}
+        </div>
+        <div style="margin-top:8px;padding:8px 12px;background:rgba(0,0,0,.2);border-radius:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span style="font-size:12px;color:rgba(255,255,255,.6);">Odd justa estimada:</span>
+          <span style="font-size:18px;font-weight:700;color:#f59e0b;">${odd}</span>
+          <span style="font-size:11px;color:rgba(255,255,255,.45);">⚡ Aposte apenas se a casa oferecer odd acima de ${odd}</span>
         </div>
         <div class="bet-justification">${s.justification}</div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
 
     body.innerHTML = `
       <div class="bet-cards">${cards}</div>
