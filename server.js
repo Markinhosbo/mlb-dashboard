@@ -224,7 +224,7 @@ RESPONDA APENAS COM ESTE JSON, NADA MAIS:
       },
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
-        max_tokens: 800,
+        max_tokens: 1000,
         messages: [{ role: 'user', content: prompt }]
       })
     });
@@ -233,10 +233,29 @@ RESPONDA APENAS COM ESTE JSON, NADA MAIS:
     if (data.error) throw new Error(data.error.message);
 
     const raw = data?.choices?.[0]?.message?.content || '';
-    const clean = raw.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(clean);
+    let clean = raw.replace(/```json|```/g, '').trim();
 
-    res.json(parsed);
+    // Tenta extrair JSON mesmo se vier com texto ao redor
+    const match = clean.match(/\{[\s\S]*\}/);
+    if (match) clean = match[0];
+
+    // Se o JSON foi cortado, tenta fechar arrays/objetos abertos
+    try {
+      const parsed = JSON.parse(clean);
+      res.json(parsed);
+    } catch(e) {
+      // Tenta recuperar cortando na última sugestão completa
+      const lastComma = clean.lastIndexOf('},');
+      if (lastComma > 0) {
+        try {
+          const recovered = clean.substring(0, lastComma + 1) + ']}';
+          const parsed = JSON.parse(recovered);
+          res.json(parsed);
+          return;
+        } catch(e2) {}
+      }
+      throw new Error('Resposta da IA em formato inválido. Tente novamente.');
+    }
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro ao gerar apostas: ' + err.message });
