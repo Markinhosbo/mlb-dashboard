@@ -173,42 +173,45 @@ app.post('/api/gerar-apostas', async (req, res) => {
     .sort((a, b) => (b.ops || 0) - (a.ops || 0))
     .slice(0, 8);
 
-  // Monta dados enriquecidos com game log
+  // Monta dados resumidos (sem game logs brutos) para economizar tokens
   const enriched = top20.map(p => {
     const log = gameLogs?.[p.id];
     return {
-      ...p,
-      recentForm: log ? {
-        lastGames: log.totalGames,
-        avgHitsRecent: log.recentAvg.hitsPerGame,
-        avgHRRecent: log.recentAvg.hrPerGame,
-        avgRBIRecent: log.recentAvg.rbiPerGame,
-        hitRates: log.hitRates,
+      name: p.name,
+      games: p.games,
+      avg: p.avg,
+      ops: p.ops,
+      hitsPerGame: p.hitsPerGame,
+      hrPerGame: p.hrPerGame,
+      rbiPerGame: p.rbiPerGame,
+      runsPerGame: p.runsPerGame,
+      recent: log ? {
+        n: log.totalGames,
+        hPG: log.recentAvg.hitsPerGame,
+        hrPG: log.recentAvg.hrPerGame,
+        rbiPG: log.recentAvg.rbiPerGame,
+        tbPG: log.recentAvg.tbPerGame,
+        h05: log.hitRates.hits_over_0_5,
+        h15: log.hitRates.hits_over_1_5,
+        hr05: log.hitRates.hr_over_0_5,
+        rbi05: log.hitRates.rbi_over_0_5,
+        rbi15: log.hitRates.rbi_over_1_5,
+        tb15: log.hitRates.tb_over_1_5,
+        tb25: log.hitRates.tb_over_2_5,
+        r05: log.hitRates.runs_over_0_5,
+        sb05: log.hitRates.sb_over_0_5,
       } : null
     };
   });
 
-  const prompt = `Você é um analista profissional de apostas esportivas especializado em MLB.
-Analise as estatísticas dos jogadores do time ${teamName} e gere até 5 sugestões de apostas VARIADAS.
+  const prompt = `Analista MLB. Time: ${teamName}. Gere até 5 apostas variadas (Hits, HR, RBI, Runs, Total Bases) APENAS com probabilidade >70%.
 
-JOGADORES (top 8 por OPS) com forma recente dos últimos 15 jogos:
-${JSON.stringify(enriched, null, 2)}
+JOGADORES (ops=OPS, hPG=hits/jogo, hrPG=HR/jogo, rbiPG=RBI/jogo; recent=últimos jogos: h05/h15=hit rate over 0.5/1.5, hr05=HR rate, rbi05/rbi15=RBI rate, tb15/tb25=Total Bases rate, r05=Runs rate):
+${JSON.stringify(enriched)}
 
-REGRAS:
-- Use hitsPerGame, hrPerGame, rbiPerGame da temporada E os dados de recentForm (últimos 15 jogos)
-- Priorize jogadores onde a média recente (recentForm) confirma ou supera a média da temporada
-- Use hitRates para validar: se a taxa histórica for >= 60% nos últimos 15 jogos, é um bom sinal
-- IMPORTANTE: Varie os tipos de aposta! Não gere só hits. Use também: Home Runs, RBIs, Runs, Total Bases, Bases Roubadas
-- Linhas aceitas: Hits 0.5/1.5/2.5 | Home Runs 0.5 | RBI 0.5/1.5 | Runs 0.5 | Total Bases 1.5/2.5 | Bases Roubadas 0.5
-- IMPORTANTE: Gere APENAS apostas com probabilidade ACIMA de 70%
-- type: lock (>80%), mid (70-80%) — NÃO inclua apostas abaixo de 70%
-- Só jogadores com games >= 8
-- Máximo 5 sugestões de tipos DIFERENTES — evite repetir o mesmo tipo de aposta
-- Se não houver apostas acima de 70%, retorne lista vazia
-- No campo hitRate inclua o % histórico real dos últimos jogos para aquela linha específica
+REGRAS: type lock(>80%) ou mid(70-80%). Só games>=8. Máx 5 apostas de tipos DIFERENTES. Se forma recente (recent) contradiz temporada, priorize recente. Retorne lista vazia se nada >70%.
 
-Responda SOMENTE JSON válido sem markdown:
-{"suggestions":[{"type":"lock|mid","player":"Nome","betType":"Tipo em pt-BR","line":"ex: 1.5 Hits","direction":"over|under","probability":78,"hitRate":73,"justification":"máx 2 frases"}]}`;
+JSON sem markdown: {"suggestions":[{"type":"lock|mid","player":"Nome","betType":"pt-BR","line":"ex: 1.5 Hits","direction":"over|under","probability":78,"hitRate":73,"justification":"1 frase"}]}`;
 
   try {
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -218,8 +221,8 @@ Responda SOMENTE JSON válido sem markdown:
         'Authorization': `Bearer ${GROQ_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
-        max_tokens: 1200,
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: 800,
         messages: [{ role: 'user', content: prompt }]
       })
     });
