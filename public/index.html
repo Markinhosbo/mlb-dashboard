@@ -383,7 +383,7 @@ async function generateBetting() {
 
   try {
     // Busca game logs dos top 20 jogadores em paralelo
-    const top20 = [...currentPlayers].sort((a, b) => (b.ops || 0) - (a.ops || 0)).slice(0, 20);
+    const top20 = [...currentPlayers].sort((a, b) => (b.ops || 0) - (a.ops || 0)).slice(0, 8);
     const season = currentSeason || 2026;
 
     const logResults = await Promise.allSettled(
